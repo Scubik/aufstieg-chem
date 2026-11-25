@@ -1,0 +1,16 @@
+{
+  "name": "Aufstieg | Химия",
+  "short_name": "Aufstieg",
+  "description": "База полных органических синтезов и реакционных схем",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#F6F8FC",
+  "theme_color": "#2563EB",
+  "icons": [
+    {
+      "src": "./aufstieg_logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

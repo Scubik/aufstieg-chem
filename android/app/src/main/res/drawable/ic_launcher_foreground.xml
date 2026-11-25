@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="196"
+    android:viewportHeight="196">
+    <!-- Aufstieg chair-cyclohexane + flag centered inside 108dp adaptive icon safe zone -->
+    <group
+        android:translateX="24"
+        android:translateY="30">
+        <!-- Chair conformation outline -->
+        <path
+            android:pathData="M14,124 L34,72 L74,72 L114,44 L94,96 L54,96 Z"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="5.5"
+            android:strokeLineJoin="round"
+            android:strokeLineCap="round" />
+        <!-- Three internal double bonds -->
+        <path
+            android:pathData="M25,111 L38.5,79"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4.2"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M78.5,77.5 L103,60.5"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4.2"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M57.5,88.5 L87.5,88.5"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="4.2"
+            android:strokeLineCap="round" />
+        <!-- Flagpole & triangular pennant -->
+        <path
+            android:pathData="M114,44 L114,9"
+            android:strokeColor="#93C5FD"
+            android:strokeWidth="5.2"
+            android:strokeLineCap="round" />
+        <path
+            android:pathData="M114,9 L136,18.5 L114,28 Z"
+            android:fillColor="#93C5FD"
+            android:strokeColor="#FFFFFF"
+            android:strokeWidth="3.2"
+            android:strokeLineJoin="round" />
+    </group>
+</vector>

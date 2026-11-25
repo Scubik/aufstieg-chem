@@ -1,0 +1,20 @@
+# Large SQLite DB (exceeds GitHub 100 MB file limit; web uses chunked web/public/data/pack_*.bin)
+android/app/src/main/assets/cbyd.db
+
+# Web
+web/node_modules/
+web/dist/
+web/.vite/
+
+# Android
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.iml
+
+# OS / Misc
+.DS_Store
+Thumbs.db
