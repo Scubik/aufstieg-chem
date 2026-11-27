@@ -125,22 +125,31 @@ def add_outline(img: Image.Image, outline_rgba: tuple[int, int, int, int]) -> Im
 
 
 def build_procedural_islands() -> None:
-    # 1. s-elements: Rock salt (halite) cubic crystal island
+    # 1. s-elements: Rock salt (halite) cubic crystal island with subtle glint
     s_img = Image.new("RGBA", (32, 32), (0, 0, 0, 0))
     d = ImageDraw.Draw(s_img)
-    # Underside rock salt base
-    d.polygon([(5, 17), (26, 17), (21, 26), (11, 27)], fill=(186, 198, 214, 255))
-    d.polygon([(8, 19), (24, 19), (20, 25), (12, 26)], fill=(148, 163, 184, 255))
-    # Cubic halite crystal blocks on top
-    cubes = [
-        (6, 11, 13, 18, (241, 245, 249, 255), (203, 213, 225, 255), (255, 255, 255, 255)),
-        (12, 7, 21, 17, (248, 250, 252, 255), (226, 232, 240, 255), (255, 255, 255, 255)),
-        (19, 10, 26, 18, (226, 232, 240, 255), (186, 198, 214, 255), (248, 250, 252, 255)),
-    ]
-    for x0, y0, x1, y1, main_c, shade_c, hi_c in cubes:
-        d.rectangle([x0, y0, x1, y1], fill=main_c)
-        d.rectangle([x1 - 2, y0 + 1, x1, y1], fill=shade_c)
-        d.rectangle([x0, y0, x1 - 1, y0 + 1], fill=hi_c)
+    # Isometric cube vertices: top (16,5), left-top (6,10), right-top (26,10),
+    # center (16,15), left-bot (6,22), right-bot (26,22), bottom (16,27)
+    # Top diamond face (bright icy white)
+    d.polygon([(16, 5), (26, 10), (16, 15), (6, 10)], fill=(248, 252, 255, 255))
+    # Left face (cool pale halite)
+    d.polygon([(6, 10), (16, 15), (16, 27), (6, 22)], fill=(214, 228, 242, 255))
+    # Right face (shaded translucent salt)
+    d.polygon([(16, 15), (26, 10), (26, 22), (16, 27)], fill=(164, 184, 208, 255))
+    # Subtle internal cubic cleavage facet / bevel for crystalline depth
+    d.polygon([(16, 7), (22, 10), (16, 13), (10, 10)], fill=(255, 255, 255, 255))
+    d.polygon([(8, 12), (14, 15), (14, 24), (8, 21)], fill=(236, 244, 252, 255))
+    d.polygon([(18, 15), (24, 12), (24, 21), (18, 24)], fill=(142, 164, 190, 255))
+    # Crisp edge highlights along upper cube ridges
+    d.line([(6, 10), (16, 15), (26, 10)], fill=(255, 255, 255, 255), width=1)
+    d.line([(16, 15), (16, 26)], fill=(241, 245, 249, 255), width=1)
+    # Subtle diagonal specular sheen + tiny 5-pixel sparkle glint on upper-left edge
+    d.line([(10, 14), (12, 16)], fill=(255, 255, 255, 255), width=1)
+    d.point((12, 9), fill=(255, 255, 255, 255))
+    d.point((11, 9), fill=(186, 230, 253, 255))
+    d.point((13, 9), fill=(186, 230, 253, 255))
+    d.point((12, 8), fill=(186, 230, 253, 255))
+    d.point((12, 10), fill=(186, 230, 253, 255))
     s_img = add_outline(s_img, (51, 65, 85, 255))
     s_img.save(OUT_DIR / "island-s.png", format="PNG")
 

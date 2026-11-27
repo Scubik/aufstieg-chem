@@ -126,6 +126,38 @@ function createRng(seed: number) {
   };
 }
 
+type RgbTuple = [number, number, number];
+
+function lerpRgb(a: RgbTuple, b: RgbTuple, k: number): RgbTuple {
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * k),
+    Math.round(a[1] + (b[1] - a[1]) * k),
+    Math.round(a[2] + (b[2] - a[2]) * k),
+  ];
+}
+
+function rgbStr(c: RgbTuple, alpha = 1): string {
+  return alpha >= 0.999
+    ? `rgb(${c[0]},${c[1]},${c[2]})`
+    : `rgba(${c[0]},${c[1]},${c[2]},${alpha.toFixed(3)})`;
+}
+
+const SKY_NIGHT: [RgbTuple, RgbTuple, RgbTuple] = [
+  [4, 9, 20],
+  [8, 21, 41],
+  [14, 36, 68],
+];
+const SKY_TWILIGHT: [RgbTuple, RgbTuple, RgbTuple] = [
+  [28, 37, 82],
+  [180, 83, 104],
+  [251, 146, 60],
+];
+const SKY_DAY: [RgbTuple, RgbTuple, RgbTuple] = [
+  [96, 165, 250],
+  [147, 197, 253],
+  [219, 234, 254],
+];
+
 function loadSprite(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -281,6 +313,14 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
     let hoveredIsland: ElementGalaxyConfig | null = null;
     let lastHasHover = false;
 
+    const TRANS_DURATION = 1.25;
+    let dayProgress = isDarkRef.current ? 0 : 1;
+    let lastDark = isDarkRef.current;
+    let transActive = false;
+    let transFrom = dayProgress;
+    let transTo = dayProgress;
+    let transStart = 0;
+
     const rebuildSkyGradients = () => {
       const darkG = ctx.createLinearGradient(0, 0, 0, height);
       darkG.addColorStop(0, '#040914');
@@ -325,31 +365,44 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       ctx.globalAlpha = 1;
     };
 
-    const drawPixelSun = (t: number) => {
-      const sx = Math.round(width - 74 + smoothMouseX * 4);
-      const sy = Math.round(52 + smoothMouseY * 3);
+    const drawPixelSun = (t: number, dayP: number) => {
+      if (dayP <= 0.02) return;
+      const arc = 1 - dayP;
+      const sx = Math.round(width - 74 - arc * 44 + smoothMouseX * 4);
+      const sy = Math.round(52 + arc * arc * height * 0.72 + smoothMouseY * 3);
       const pulse = Math.sin(t * 1.8) > 0 ? 1 : 0;
+      const lowSun = Math.max(0, 1 - dayP / 0.65);
 
-      ctx.fillStyle = 'rgba(253, 224, 71, 0.25)';
+      const haloAlpha = 0.25 * dayP;
+      ctx.fillStyle = lowSun > 0.2
+        ? `rgba(251, 146, 60, ${(haloAlpha * 1.25).toFixed(3)})`
+        : `rgba(253, 224, 71, ${haloAlpha.toFixed(3)})`;
       ctx.fillRect(sx - 22 - pulse * 2, sy - 22 - pulse * 2, 44 + pulse * 4, 44 + pulse * 4);
-      ctx.fillStyle = '#fde047';
+
+      const rayColor = rgbStr(lerpRgb([253, 224, 71], [249, 115, 22], lowSun), Math.min(1, dayP * 1.3));
+      const bodyColor = rgbStr(lerpRgb([250, 204, 21], [251, 146, 60], lowSun));
+      const coreColor = rgbStr(lerpRgb([254, 249, 195], [253, 224, 71], lowSun));
+
+      ctx.fillStyle = rayColor;
       ctx.fillRect(sx - 24 - pulse * 3, sy - 2, 6, 4);
       ctx.fillRect(sx + 18 + pulse * 3, sy - 2, 6, 4);
       ctx.fillRect(sx - 2, sy - 24 - pulse * 3, 4, 6);
       ctx.fillRect(sx - 2, sy + 18 + pulse * 3, 4, 6);
-      ctx.fillStyle = '#facc15';
+      ctx.fillStyle = bodyColor;
       ctx.fillRect(sx - 14, sy - 10, 28, 20);
       ctx.fillRect(sx - 10, sy - 14, 20, 28);
-      ctx.fillStyle = '#fef9c3';
+      ctx.fillStyle = coreColor;
       ctx.fillRect(sx - 8, sy - 8, 16, 16);
     };
 
-    const drawDayCloud = (cx: number, cy: number, sc: number) => {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    const drawDayCloud = (cx: number, cy: number, sc: number, alpha: number, twilight: number) => {
+      const topRgb = lerpRgb([255, 255, 255], [254, 215, 170], twilight * 0.7);
+      const botRgb = lerpRgb([186, 230, 253], [244, 114, 182], twilight * 0.45);
+      ctx.fillStyle = rgbStr(topRgb, 0.85 * alpha);
       ctx.fillRect(cx - 10 * sc, cy - 2 * sc, 20 * sc, 5 * sc);
       ctx.fillRect(cx - 7 * sc, cy - 5 * sc, 12 * sc, 4 * sc);
       ctx.fillRect(cx - 3 * sc, cy - 7 * sc, 7 * sc, 3 * sc);
-      ctx.fillStyle = 'rgba(186, 230, 253, 0.7)';
+      ctx.fillStyle = rgbStr(botRgb, 0.7 * alpha);
       ctx.fillRect(cx - 9 * sc, cy + 2 * sc, 18 * sc, 2 * sc);
     };
 
@@ -360,25 +413,77 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       }
 
       const t = now * 0.001;
-      const dark = isDarkRef.current;
+      const wantDark = isDarkRef.current;
+      if (wantDark !== lastDark) {
+        lastDark = wantDark;
+        transFrom = dayProgress;
+        transTo = wantDark ? 0 : 1;
+        transStart = t;
+        transActive = true;
+      }
+      if (transActive) {
+        const u = Math.min(1, (t - transStart) / TRANS_DURATION);
+        const eased = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+        dayProgress = transFrom + (transTo - transFrom) * eased;
+        if (u >= 1) {
+          dayProgress = transTo;
+          transActive = false;
+        }
+      }
+
+      const dark = dayProgress < 0.5;
+      const nightFactor = 1 - dayProgress;
+      const twilight = Math.sin(dayProgress * Math.PI);
 
       smoothMouseX += (targetMouseX - smoothMouseX) * 0.06;
       smoothMouseY += (targetMouseY - smoothMouseY) * 0.06;
 
       ctx.imageSmoothingEnabled = false;
 
-      // 1. Sky (Night vs Clear Day)
-      ctx.fillStyle = (dark ? skyGradDark : skyGradLight) ?? '#040914';
+      // 1. Sky (Night <-> Golden/Rose Twilight <-> Clear Day)
+      if (dayProgress <= 0.001) {
+        ctx.fillStyle = skyGradDark ?? '#040914';
+      } else if (dayProgress >= 0.999) {
+        ctx.fillStyle = skyGradLight ?? '#93c5fd';
+      } else {
+        const grad = ctx.createLinearGradient(0, 0, 0, height);
+        const pMid = 0.48;
+        const [topC, midC, botC] =
+          dayProgress < pMid
+            ? [
+                lerpRgb(SKY_NIGHT[0], SKY_TWILIGHT[0], dayProgress / pMid),
+                lerpRgb(SKY_NIGHT[1], SKY_TWILIGHT[1], dayProgress / pMid),
+                lerpRgb(SKY_NIGHT[2], SKY_TWILIGHT[2], dayProgress / pMid),
+              ]
+            : [
+                lerpRgb(SKY_TWILIGHT[0], SKY_DAY[0], (dayProgress - pMid) / (1 - pMid)),
+                lerpRgb(SKY_TWILIGHT[1], SKY_DAY[1], (dayProgress - pMid) / (1 - pMid)),
+                lerpRgb(SKY_TWILIGHT[2], SKY_DAY[2], (dayProgress - pMid) / (1 - pMid)),
+              ];
+        grad.addColorStop(0, rgbStr(topC));
+        grad.addColorStop(0.58, rgbStr(midC));
+        grad.addColorStop(1, rgbStr(botC));
+        ctx.fillStyle = grad;
+      }
       ctx.fillRect(0, 0, width, height);
 
-      // 2. Night stars OR Day sun + clouds
-      if (dark) {
+      // Subtle pixel-stepped warm horizon band during sunrise/sunset
+      if (twilight > 0.03) {
+        ctx.fillStyle = `rgba(251, 146, 60, ${(twilight * 0.22).toFixed(3)})`;
+        ctx.fillRect(0, Math.round(height * 0.64), width, Math.round(height * 0.36));
+        ctx.fillStyle = `rgba(253, 224, 71, ${(twilight * 0.14).toFixed(3)})`;
+        ctx.fillRect(0, Math.round(height * 0.74), width, Math.round(height * 0.26));
+      }
+
+      // 2. Night stars + Rising/Setting Sun + Day clouds
+      if (dayProgress < 0.75) {
+        const starVis = Math.max(0, 1 - dayProgress / 0.75);
         for (let i = 0; i < skyStars.length; i++) {
           const st = skyStars[i];
           const sx = Math.round(st.rx * width + smoothMouseX * 8);
           const sy = Math.round(st.ry * height + smoothMouseY * 5);
           const tw = 0.45 + 0.55 * Math.sin(t * st.speed + st.phase);
-          ctx.globalAlpha = st.baseAlpha * tw;
+          ctx.globalAlpha = st.baseAlpha * tw * starVis;
           ctx.fillStyle = st.isCross ? '#e0f2fe' : '#bae6fd';
           if (st.isCross && tw > 0.72) {
             ctx.fillRect(sx - 2, sy, 6, 2);
@@ -388,24 +493,41 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
           }
         }
         ctx.globalAlpha = 1;
-      } else {
-        drawPixelSun(t);
+      }
+
+      drawPixelSun(t, dayProgress);
+
+      if (dayProgress > 0.18) {
+        const cloudVis = Math.min(1, (dayProgress - 0.18) / 0.65);
         for (let i = 0; i < dayClouds.length; i++) {
           const cl = dayClouds[i];
           const cx = Math.round(((cl.rx + t * cl.speed) % 1.15 - 0.08) * width);
           const cy = Math.round(cl.ry * height);
-          drawDayCloud(cx, cy, cl.scale);
+          drawDayCloud(cx, cy, cl.scale, cloudVis, twilight);
         }
       }
 
-      // 3. Far mountains (day or night)
+      // 3. Far mountains (day/night crossfade)
       const mtnScale = width < 640 ? 2 : 3;
-      drawTiledMountains(
-        sprites.get(dark ? 'mountains-far' : 'mountains-far-day'),
-        mtnScale,
-        -smoothMouseX * 16,
-        dark ? 0.9 : 0.92,
-      );
+      const farAlpha = 0.9 + 0.02 * dayProgress;
+      if (dayProgress <= 0.001) {
+        drawTiledMountains(sprites.get('mountains-far'), mtnScale, -smoothMouseX * 16, farAlpha);
+      } else if (dayProgress >= 0.999) {
+        drawTiledMountains(sprites.get('mountains-far-day'), mtnScale, -smoothMouseX * 16, farAlpha);
+      } else {
+        drawTiledMountains(
+          sprites.get('mountains-far'),
+          mtnScale,
+          -smoothMouseX * 16,
+          farAlpha * (1 - dayProgress),
+        );
+        drawTiledMountains(
+          sprites.get('mountains-far-day'),
+          mtnScale,
+          -smoothMouseX * 16,
+          farAlpha * dayProgress,
+        );
+      }
 
       // 4. Floating islands + realistic orbiting element sprites
       const nextStoneHits: ProjectedStoneHit[] = [];
@@ -422,7 +544,6 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
         const bob = Math.sin(t * pos.bobSpeed + gi * 1.35) * pos.bobAmp;
         const cx = Math.round(rx * width + smoothMouseX * (10 + (gi % 2) * 5));
         const cy = Math.round(pos.ry * height + bob + smoothMouseY * 6);
-        const isGalHovered = hoveredIsland?.id === galaxy.id;
 
         const orbitScale = width < 640 ? 0.62 : 1;
         const orbitRx = pos.orbitRx * orbitScale;
@@ -495,7 +616,6 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
 
         const drawOrbitElement = (s: (typeof backItems)[number], isFront: boolean) => {
           const el = s.seed.element;
-          const sprite = dark ? s.seed.nightSprite : s.seed.daySprite;
           const hasChain = Boolean(el.chainId);
           const isHov =
             hoveredStone &&
@@ -503,35 +623,54 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
             hoveredStone.element.symbol === el.symbol;
 
           const sc = isHov ? baseObjScale + 0.75 : baseObjScale;
-          const sw = Math.round(sprite.width * sc);
-          const sh = Math.round(sprite.height * sc);
+          const sw = Math.round(s.seed.daySprite.width * sc);
+          const sh = Math.round(s.seed.daySprite.height * sc);
           const sx = Math.round(s.x - sw / 2);
           const sy = Math.round(s.y - sh / 2);
 
           // Cached glow sprite for noble gas tubes or f-block nuclei at night
           if (el.visualKind === 'gas-tube') {
             const glowR = isFront ? 16 : 11;
-            ctx.globalAlpha = isFront ? (dark ? 0.45 : 0.3) : 0.2;
+            ctx.globalAlpha = isFront ? 0.3 + 0.15 * nightFactor : 0.2;
             ctx.drawImage(getGlowCanvas(el.colors[1], glowR), s.x - glowR, s.y - glowR);
-          } else if (dark && el.visualKind === 'nucleus') {
+          } else if (nightFactor > 0.05 && el.visualKind === 'nucleus') {
             const glowR = isFront ? 13 : 9;
-            ctx.globalAlpha = isFront ? 0.32 : 0.18;
+            ctx.globalAlpha = (isFront ? 0.32 : 0.18) * nightFactor;
             ctx.drawImage(getGlowCanvas(el.colors[2], glowR), s.x - glowR, s.y - glowR);
           }
 
-          if (el.visualKind === 'gas-cloud') {
-            ctx.globalAlpha = isFront ? 0.92 : 0.62;
-          } else {
-            ctx.globalAlpha = isFront ? (hasChain ? 1 : 0.85) : hasChain ? 0.68 : 0.5;
-          }
+          const baseAlpha =
+            el.visualKind === 'gas-cloud'
+              ? isFront
+                ? 0.92
+                : 0.62
+              : isFront
+                ? hasChain
+                  ? 1
+                  : 0.85
+                : hasChain
+                  ? 0.68
+                  : 0.5;
 
           if (isHov) {
+            ctx.globalAlpha = baseAlpha;
             ctx.strokeStyle = dark ? '#e0f2fe' : '#0f172a';
             ctx.lineWidth = 2;
             ctx.strokeRect(sx - 3, sy - 3, sw + 6, sh + 6);
           }
 
-          ctx.drawImage(sprite, sx, sy, sw, sh);
+          if (isNightLit || dayProgress >= 0.999) {
+            ctx.globalAlpha = baseAlpha;
+            ctx.drawImage(s.seed.daySprite, sx, sy, sw, sh);
+          } else if (dayProgress <= 0.001) {
+            ctx.globalAlpha = baseAlpha;
+            ctx.drawImage(s.seed.nightSprite, sx, sy, sw, sh);
+          } else {
+            ctx.globalAlpha = baseAlpha * (1 - dayProgress);
+            ctx.drawImage(s.seed.nightSprite, sx, sy, sw, sh);
+            ctx.globalAlpha = baseAlpha * dayProgress;
+            ctx.drawImage(s.seed.daySprite, sx, sy, sw, sh);
+          }
 
           nextStoneHits.push({
             x: s.x,
@@ -546,15 +685,25 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
         ctx.globalAlpha = 1;
 
         const islandKey = `island-${galaxy.id}`;
-        const islandSource =
-          dark && !isNightLit ? (nightSprites.get(islandKey) ?? sprites.get(islandKey)) : sprites.get(islandKey);
-        const iw = (islandSource?.width || 32) * islandScale;
-        const ih = (islandSource?.height || 32) * islandScale;
+        const dayIsland = sprites.get(islandKey);
+        const nightIsland = nightSprites.get(islandKey) ?? dayIsland;
+        const iw = (dayIsland?.width || 32) * islandScale;
+        const ih = (dayIsland?.height || 32) * islandScale;
         const ix = Math.round(cx - iw / 2);
         const iy = Math.round(cy - ih / 2);
 
-        if (islandSource) {
-          ctx.drawImage(islandSource, ix, iy, iw, ih);
+        if (dayIsland && nightIsland) {
+          if (isNightLit || dayProgress >= 0.999) {
+            ctx.drawImage(dayIsland, ix, iy, iw, ih);
+          } else if (dayProgress <= 0.001) {
+            ctx.drawImage(nightIsland, ix, iy, iw, ih);
+          } else {
+            ctx.globalAlpha = 1 - dayProgress;
+            ctx.drawImage(nightIsland, ix, iy, iw, ih);
+            ctx.globalAlpha = dayProgress;
+            ctx.drawImage(dayIsland, ix, iy, iw, ih);
+            ctx.globalAlpha = 1;
+          }
         }
 
         nextIslandHits.push({
@@ -566,25 +715,22 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
 
         for (let i = 0; i < frontItems.length; i++) drawOrbitElement(frontItems[i], true);
         ctx.globalAlpha = 1;
-
-        // Family label
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
-        ctx.font = `${isGalHovered ? '700' : '600'} 12px "Space Grotesk", "Inter", sans-serif`;
-        ctx.fillStyle = isGalHovered
-          ? dark
-            ? '#38bdf8'
-            : '#1d4ed8'
-          : dark
-            ? 'rgba(226, 232, 240, 0.88)'
-            : 'rgba(15, 23, 42, 0.88)';
-        ctx.fillText(galaxy.label, cx, Math.round(cy + ih * 0.5 + 14));
       });
 
-      // 5. Near mountains (day or night) + highlighted summit peak with waving Aufstieg flag
-      const nearMtnImg = sprites.get(dark ? 'mountains-near' : 'mountains-near-day');
+      // 5. Near mountains (day/night crossfade) + highlighted summit peak with waving Aufstieg flag
+      const nearNightImg = sprites.get('mountains-near');
+      const nearDayImg = sprites.get('mountains-near-day');
+      const nearMtnImg = dark ? nearNightImg : nearDayImg;
       const nearOffsetX = -smoothMouseX * 32;
-      drawTiledMountains(nearMtnImg, mtnScale, nearOffsetX, dark ? 0.96 : 0.98);
+      const nearAlpha = 0.96 + 0.02 * dayProgress;
+      if (dayProgress <= 0.001) {
+        drawTiledMountains(nearNightImg, mtnScale, nearOffsetX, nearAlpha);
+      } else if (dayProgress >= 0.999) {
+        drawTiledMountains(nearDayImg, mtnScale, nearOffsetX, nearAlpha);
+      } else {
+        drawTiledMountains(nearNightImg, mtnScale, nearOffsetX, nearAlpha * (1 - dayProgress));
+        drawTiledMountains(nearDayImg, mtnScale, nearOffsetX, nearAlpha * dayProgress);
+      }
 
       if (nearMtnImg && nearMtnImg.complete && nearMtnImg.width > 0) {
         const drawW = nearMtnImg.width * mtnScale;
@@ -610,9 +756,9 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
           const peakY = baseY + peakPy * mtnScale;
           const px = mtnScale;
 
-          if (dark) {
+          if (nightFactor > 0.05) {
             const glowR = px * 10;
-            ctx.globalAlpha = 0.28;
+            ctx.globalAlpha = 0.28 * nightFactor;
             ctx.drawImage(
               getGlowCanvas('#7dd3fc', glowR),
               bestPeakX - glowR,

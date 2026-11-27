@@ -121,24 +121,12 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({
     <div className="catalog-wrap">
       <div className="catalog-toolbar-wrap">
         <div className="catalog-head-row">
-          <div>
+          <div className="catalog-head-inline">
             <h1 className="page-title">Органические синтезы</h1>
-            <div style={{ fontSize: 13, color: 'var(--on-surface-variant)', marginTop: 4 }}>
-              Показано {items.length.toLocaleString('ru-RU')} из {totalCount.toLocaleString('ru-RU')} синтезов · Chemistry By Design
-            </div>
+            <span className="catalog-head-count">
+              Показано {items.length.toLocaleString('ru-RU')} из {totalCount.toLocaleString('ru-RU')} · Chemistry By Design
+            </span>
           </div>
-
-          <button
-            type="button"
-            className="btn-cta-secondary"
-            onClick={() => {
-              hapticLight();
-              onSelectRandom();
-            }}
-          >
-            <Dices size={16} />
-            Случайный синтез
-          </button>
         </div>
 
         <div className="catalog-controls-bar">
@@ -194,6 +182,17 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({
             >
               <ArrowUpDown size={14} />
               {sortLabel}
+            </button>
+            <button
+              type="button"
+              className="chip chip-random"
+              onClick={() => {
+                hapticLight();
+                onSelectRandom();
+              }}
+            >
+              <Dices size={14} />
+              Случайный синтез
             </button>
           </div>
         </div>

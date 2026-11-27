@@ -55,7 +55,9 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
   onToggleCompleted,
 }) => {
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const pillRefs = useRef<Map<string, HTMLButtonElement>>(new Map());
   const [selectedX, setSelectedX] = useState<string | null>(null);
+  const [hoveredX, setHoveredX] = useState<string | null>(null);
   const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
   const [dragging, setDragging] = useState(false);
   const [tf, setTf] = useState<BoardTransform>({ scale: 1, x: 20, y: 20, fitScale: 1 });
@@ -63,6 +65,7 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
   tfRef.current = tf;
 
   const pointersRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const capturedPointerRef = useRef<number | null>(null);
   const dragRef = useRef<{ active: boolean; sx: number; sy: number; ox: number; oy: number }>({
     active: false,
     sx: 0,
@@ -117,6 +120,7 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
 
   useEffect(() => {
     setSelectedX(compoundKeys[0] ?? null);
+    setHoveredX(null);
     setRevealedKeys(new Set());
     const id = requestAnimationFrame(fitBoard);
     return () => cancelAnimationFrame(id);
@@ -198,6 +202,13 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
       const next = new Set(prev);
       next.add(xKey);
       return next;
+    });
+    requestAnimationFrame(() => {
+      pillRefs.current.get(xKey)?.scrollIntoView({
+        block: 'nearest',
+        inline: 'nearest',
+        behavior: 'smooth',
+      });
     });
     if (focus) focusOnCompound(xKey);
   }, [focusOnCompound]);
@@ -314,7 +325,6 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
             }}
             onPointerDown={(e) => {
               if ((e.target as HTMLElement).closest('button')) return;
-              (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
               pointersRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
 
               if (pointersRef.current.size === 1) {
@@ -327,7 +337,7 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
                   oy: tfRef.current.y,
                 };
                 pinchRef.current = null;
-                setDragging(true);
+                setDragging(false);
               } else if (pointersRef.current.size === 2) {
                 const pts = Array.from(pointersRef.current.values());
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -368,20 +378,39 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
               } else if (pointersRef.current.size === 1 && dragRef.current.active) {
                 const dx = e.clientX - dragRef.current.sx;
                 const dy = e.clientY - dragRef.current.sy;
-                if (Math.hypot(dx, dy) > 5) {
+                if (!dragMovedRef.current && Math.hypot(dx, dy) > 5) {
                   dragMovedRef.current = true;
+                  setDragging(true);
+                  if (capturedPointerRef.current !== e.pointerId) {
+                    try {
+                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                      capturedPointerRef.current = e.pointerId;
+                    } catch {
+                      // ignore
+                    }
+                  }
                 }
-                setTf((prev) =>
-                  clampTransform({
-                    ...prev,
-                    x: dragRef.current.ox + dx,
-                    y: dragRef.current.oy + dy,
-                  }),
-                );
+                if (dragMovedRef.current) {
+                  setTf((prev) =>
+                    clampTransform({
+                      ...prev,
+                      x: dragRef.current.ox + dx,
+                      y: dragRef.current.oy + dy,
+                    }),
+                  );
+                }
               }
             }}
             onPointerUp={(e) => {
               pointersRef.current.delete(e.pointerId);
+              if (capturedPointerRef.current === e.pointerId) {
+                try {
+                  (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                } catch {
+                  // ignore
+                }
+                capturedPointerRef.current = null;
+              }
               if (pointersRef.current.size < 2) pinchRef.current = null;
               if (pointersRef.current.size === 0) {
                 dragRef.current.active = false;
@@ -390,6 +419,14 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
             }}
             onPointerCancel={(e) => {
               pointersRef.current.delete(e.pointerId);
+              if (capturedPointerRef.current === e.pointerId) {
+                try {
+                  (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+                } catch {
+                  // ignore
+                }
+                capturedPointerRef.current = null;
+              }
               pinchRef.current = null;
               dragRef.current.active = false;
               setDragging(false);
@@ -416,8 +453,7 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
               >
                 {compoundKeys.map((xKey) => {
                   const comp = chain.compounds[xKey];
-                  const isActive = selectedX === xKey;
-                  const isRev = revealedKeys.has(xKey);
+                  const isHov = hoveredX === xKey;
                   return comp.boxes.map((box, bIdx) => (
                     <rect
                       key={`${xKey}-${bIdx}`}
@@ -426,14 +462,16 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
                       width={box.w}
                       height={box.h}
                       rx={1.5}
-                      className={`chain-box-rect ${isRev ? 'revealed' : ''} ${isActive ? 'active' : ''}`}
+                      className={`chain-box-rect ${isHov ? 'hovered' : ''}`}
+                      onMouseEnter={() => setHoveredX(xKey)}
+                      onMouseLeave={() => setHoveredX((cur) => (cur === xKey ? null : cur))}
                       onClick={(e) => {
                         e.stopPropagation();
                         if (dragMovedRef.current) return;
                         handleSelectX(xKey);
                       }}
                     >
-                      <title>X{xKey}: нажмите, чтобы открыть формулу</title>
+                      <title>X{xKey}: нажмите, чтобы выбрать в панели справа</title>
                     </rect>
                   ));
                 })}
@@ -468,6 +506,10 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
                 return (
                   <button
                     key={xKey}
+                    ref={(el) => {
+                      if (el) pillRefs.current.set(xKey, el);
+                      else pillRefs.current.delete(xKey);
+                    }}
                     type="button"
                     className={`compound-x-btn ${isRev ? 'revealed' : ''} ${isActive ? 'active' : ''}`}
                     onClick={() => handleSelectX(xKey, true)}
@@ -534,7 +576,7 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
               </div>
             ) : (
               <div className="inspector-detail-card" style={{ color: 'var(--on-surface-variant)', fontSize: 13.5 }}>
-                Кликните по любой подсвеченной области X на схеме или выберите номер выше.
+                Наведите и кликните по веществу X на схеме или выберите номер выше.
               </div>
             )}
 

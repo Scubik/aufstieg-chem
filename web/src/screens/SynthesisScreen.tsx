@@ -106,64 +106,11 @@ export const SynthesisScreen: React.FC<SynthesisScreenProps> = ({
             {meta && <div className="syn-meta">{meta}</div>}
           </div>
 
-          <button
-            type="button"
-            className="syn-icon-btn"
-            onClick={() => {
-              hapticLight();
-              onToggleFavorite();
-            }}
-            aria-label="Избранное"
-          >
-            <Heart
-              size={19}
-              color={isFavorite ? 'var(--primary)' : 'currentColor'}
-              fill={isFavorite ? 'var(--primary)' : 'none'}
-            />
-          </button>
-
-          <button
-            type="button"
-            className="syn-icon-btn"
-            onClick={() => {
-              hapticLight();
-              onToggleCompleted();
-            }}
-            aria-label="Отметить как сделанный"
-          >
-            {isCompleted ? (
-              <CheckCircle2 size={19} color="var(--secondary)" />
-            ) : (
-              <Circle size={19} />
-            )}
-          </button>
-
-          <button
-            type="button"
-            className="syn-icon-btn"
-            disabled={!activeSeq || isExportingPdf}
-            onClick={() => setShowPdfDialog(true)}
-            aria-label="Экспорт в PDF"
-          >
-            {isExportingPdf ? <span className="spinner-sm" /> : <FileDown size={19} />}
-          </button>
-
-          <button
-            type="button"
-            className="syn-icon-btn"
-            onClick={() => setShowInfoSheet(true)}
-            aria-label="Источник и DOI"
-          >
-            <Info size={19} />
-          </button>
-        </div>
-
-        <div style={{ maxWidth: 1400, width: '100%', margin: '0 auto', display: 'flex' }}>
-          <div className="segmented" style={{ height: 34, width: 'fit-content' }}>
+          <div className="segmented synthesis-mode-switch">
             <button
               type="button"
               className={`seg-btn ${viewMode === 'feed' ? 'active' : ''}`}
-              style={{ padding: '4px 12px', fontSize: 12.5 }}
+              style={{ padding: '4px 10px', fontSize: 12.5 }}
               onClick={() => setViewMode('feed')}
             >
               <List size={14} />
@@ -172,11 +119,64 @@ export const SynthesisScreen: React.FC<SynthesisScreenProps> = ({
             <button
               type="button"
               className={`seg-btn ${viewMode === 'canvas' ? 'active' : ''}`}
-              style={{ padding: '4px 12px', fontSize: 12.5 }}
+              style={{ padding: '4px 10px', fontSize: 12.5 }}
               onClick={() => setViewMode('canvas')}
             >
               <GitBranch size={14} />
               Схема
+            </button>
+          </div>
+
+          <div className="synthesis-top-actions">
+            <button
+              type="button"
+              className="syn-icon-btn"
+              onClick={() => {
+                hapticLight();
+                onToggleFavorite();
+              }}
+              aria-label="Избранное"
+            >
+              <Heart
+                size={19}
+                color={isFavorite ? 'var(--primary)' : 'currentColor'}
+                fill={isFavorite ? 'var(--primary)' : 'none'}
+              />
+            </button>
+
+            <button
+              type="button"
+              className="syn-icon-btn"
+              onClick={() => {
+                hapticLight();
+                onToggleCompleted();
+              }}
+              aria-label="Отметить как сделанный"
+            >
+              {isCompleted ? (
+                <CheckCircle2 size={19} color="var(--secondary)" />
+              ) : (
+                <Circle size={19} />
+              )}
+            </button>
+
+            <button
+              type="button"
+              className="syn-icon-btn"
+              disabled={!activeSeq || isExportingPdf}
+              onClick={() => setShowPdfDialog(true)}
+              aria-label="Экспорт в PDF"
+            >
+              {isExportingPdf ? <span className="spinner-sm" /> : <FileDown size={19} />}
+            </button>
+
+            <button
+              type="button"
+              className="syn-icon-btn"
+              onClick={() => setShowInfoSheet(true)}
+              aria-label="Источник и DOI"
+            >
+              <Info size={19} />
             </button>
           </div>
         </div>
@@ -568,7 +568,7 @@ const FeedStepBlock: React.FC<FeedStepBlockProps> = ({
           </div>
 
           {reagentRevealed ? (
-            <div className="diagram-body" style={{ minHeight: 80, maxHeight: 210 }}>
+            <div className="diagram-body">
               <ChemDiagramImage
                 chem={step.reaction.combined}
                 alt={`Реагенты и условия (стадия ${stepNumber})`}

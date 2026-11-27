@@ -50,17 +50,12 @@ export const InorganicCatalogScreen: React.FC<InorganicCatalogScreenProps> = ({
     <div className="catalog-wrap">
       <div className="catalog-toolbar-wrap">
         <div className="catalog-head-row">
-          <div>
+          <div className="catalog-head-inline">
             <h1 className="page-title">Неорганические цепочки</h1>
-            <div style={{ fontSize: 13, color: 'var(--on-surface-variant)', marginTop: 4 }}>
+            <span className="catalog-head-count">
               Показано {filtered.length} из {items.length} элементов · Н. В. Мещеряков
-            </div>
+            </span>
           </div>
-
-          <button type="button" className="btn-cta-secondary" onClick={onSelectRandom}>
-            <Dices size={16} />
-            Случайный элемент
-          </button>
         </div>
 
         <div className="catalog-controls-bar">
@@ -117,6 +112,17 @@ export const InorganicCatalogScreen: React.FC<InorganicCatalogScreenProps> = ({
               </button>
             );
           })}
+          <button
+            type="button"
+            className="chip chip-random"
+            onClick={() => {
+              hapticLight();
+              onSelectRandom();
+            }}
+          >
+            <Dices size={14} />
+            Случайный элемент
+          </button>
         </div>
       </div>
 
