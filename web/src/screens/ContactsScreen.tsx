@@ -41,7 +41,7 @@ export const ContactsScreen: React.FC<ContactsScreenProps> = ({
   };
 
   return (
-    <div className="screen-scroll">
+    <div className="page-scroll">
       <div className="contacts-wrap">
         <h1 className="page-title">Контакты и настройки</h1>
 

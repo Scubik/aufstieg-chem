@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "prepare-data": "python scripts/prepare_data.py"
+    "prepare-data": "python scripts/prepare_data.py",
+    "prepare-inorganic": "python scripts/prepare_inorganic.py"
   },
   "dependencies": {
     "jspdf": "^2.5.2",

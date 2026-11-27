@@ -158,12 +158,12 @@ export const SynthesisScreen: React.FC<SynthesisScreenProps> = ({
           </button>
         </div>
 
-        <div style={{ padding: '0 6px' }}>
-          <div className="segmented" style={{ height: 32 }}>
+        <div style={{ maxWidth: 1400, width: '100%', margin: '0 auto', display: 'flex' }}>
+          <div className="segmented" style={{ height: 34, width: 'fit-content' }}>
             <button
               type="button"
               className={`seg-btn ${viewMode === 'feed' ? 'active' : ''}`}
-              style={{ padding: '4px 6px', fontSize: 12.5 }}
+              style={{ padding: '4px 12px', fontSize: 12.5 }}
               onClick={() => setViewMode('feed')}
             >
               <List size={14} />
@@ -172,7 +172,7 @@ export const SynthesisScreen: React.FC<SynthesisScreenProps> = ({
             <button
               type="button"
               className={`seg-btn ${viewMode === 'canvas' ? 'active' : ''}`}
-              style={{ padding: '4px 6px', fontSize: 12.5 }}
+              style={{ padding: '4px 12px', fontSize: 12.5 }}
               onClick={() => setViewMode('canvas')}
             >
               <GitBranch size={14} />

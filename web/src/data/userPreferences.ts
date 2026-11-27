@@ -6,6 +6,8 @@ const KEYS = {
   viewMode: 'aufstieg_default_view',
   favorites: 'aufstieg_favorites',
   completed: 'aufstieg_completed',
+  inorganicFavorites: 'aufstieg_inorganic_favorites',
+  inorganicCompleted: 'aufstieg_inorganic_completed',
   history: 'aufstieg_history',
 } as const;
 
@@ -30,7 +32,7 @@ function writeJson(key: string, value: unknown): void {
 export function loadThemeMode(): AppThemeMode {
   const val = localStorage.getItem(KEYS.theme);
   if (val === 'light' || val === 'dark' || val === 'system') return val;
-  return 'system';
+  return 'dark';
 }
 
 export function saveThemeMode(mode: AppThemeMode): void {
@@ -77,4 +79,20 @@ export function loadHistory(): HistoryEntry[] {
 
 export function saveHistory(list: HistoryEntry[]): void {
   writeJson(KEYS.history, list.slice(0, 60));
+}
+
+export function loadInorganicFavorites(): string[] {
+  return readJson<string[]>(KEYS.inorganicFavorites, []);
+}
+
+export function saveInorganicFavorites(list: string[]): void {
+  writeJson(KEYS.inorganicFavorites, list);
+}
+
+export function loadInorganicCompleted(): string[] {
+  return readJson<string[]>(KEYS.inorganicCompleted, []);
+}
+
+export function saveInorganicCompleted(list: string[]): void {
+  writeJson(KEYS.inorganicCompleted, list);
 }

@@ -2,6 +2,8 @@ export type AppThemeMode = 'system' | 'light' | 'dark';
 export type ViewMode = 'feed' | 'canvas';
 export type CatalogFilter = 'all' | 'drugs' | 'natural';
 export type SortOption = 'name_asc' | 'year_desc' | 'year_asc' | 'author_asc';
+export type AppSection = 'overview' | 'organic' | 'inorganic' | 'collection' | 'contacts';
+export type GalaxyId = 's' | 'p' | 'noble-gases' | 'd' | 'platinum-noble' | 'f';
 
 export interface RawCatalogEntry {
   p: string; // path
@@ -77,4 +79,48 @@ export interface HistoryEntry {
   lastStep: number;
   totalSteps: number;
   timestamp: number;
+}
+
+export interface InorganicChainMeta {
+  id: string;
+  element: string;
+  title: string;
+  groupNum: number;
+  groupTitle: string;
+  galaxyId: GalaxyId;
+  bookPage: number | null;
+  xCount: number;
+}
+
+export interface InorganicCompoundBox {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color?: string;
+}
+
+export interface InorganicCompound {
+  formulaHtml: string;
+  formulaPlain: string;
+  color: string;
+  omega: string;
+  sources: string;
+  trivial: string;
+  boxes: InorganicCompoundBox[];
+}
+
+export interface InorganicChainDetail {
+  id: string;
+  element: string;
+  title: string;
+  groupNum: number;
+  groupTitle: string;
+  galaxyId: GalaxyId;
+  bookPage: number | null;
+  viewbox: string;
+  omegaLabel: string;
+  notes: string;
+  svg: string;
+  compounds: Record<string, InorganicCompound>;
 }

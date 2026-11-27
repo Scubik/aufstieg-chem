@@ -2,15 +2,11 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   ArrowUpDown,
   Dices,
-  Moon,
   Pill,
   Search,
-  Sun,
-  SunMoon,
   X,
 } from 'lucide-react';
-import type { AppThemeMode, CatalogFilter, CatalogItem, SortOption } from '../types/models';
-import { AufstiegChairLogo } from '../components/AufstiegLogo';
+import type { CatalogFilter, CatalogItem, SortOption } from '../types/models';
 import { CatalogCard } from '../components/CatalogCard';
 import { hapticLight } from '../utils/telegram';
 
@@ -24,7 +20,6 @@ interface CatalogScreenProps {
   sort: SortOption;
   favorites: Set<string>;
   completed: Set<string>;
-  themeMode: AppThemeMode;
   isDark: boolean;
   adaptiveDark: boolean;
   selectedRandomPath: string | null;
@@ -32,7 +27,6 @@ interface CatalogScreenProps {
   onQueryChange: (q: string) => void;
   onFilterChange: (f: CatalogFilter) => void;
   onSortChange: (s: SortOption) => void;
-  onCycleTheme: () => void;
   onToggleFavorite: (path: string) => void;
   onToggleCompleted: (path: string) => void;
   onOpenItem: (item: CatalogItem) => void;
@@ -51,7 +45,6 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({
   sort,
   favorites,
   completed,
-  themeMode,
   isDark,
   adaptiveDark,
   selectedRandomPath,
@@ -59,7 +52,6 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({
   onQueryChange,
   onFilterChange,
   onSortChange,
-  onCycleTheme,
   onToggleFavorite,
   onToggleCompleted,
   onOpenItem,
@@ -127,91 +119,84 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({
 
   return (
     <div className="catalog-wrap">
-      <div className="top-header">
-        <div className="brand-row">
-          <div className="brand-badge">
-            <AufstiegChairLogo strokeColor="var(--primary)" flagColor="var(--primary)" />
-          </div>
+      <div className="catalog-toolbar-wrap">
+        <div className="catalog-head-row">
           <div>
-            <div className="brand-title">Aufstieg | Химия</div>
-            <div className="brand-sub">
-              Показано {items.length} из {totalCount} синтезов
+            <h1 className="page-title">Органические синтезы</h1>
+            <div style={{ fontSize: 13, color: 'var(--on-surface-variant)', marginTop: 4 }}>
+              Показано {items.length.toLocaleString('ru-RU')} из {totalCount.toLocaleString('ru-RU')} синтезов · Chemistry By Design
             </div>
           </div>
+
+          <button
+            type="button"
+            className="btn-cta-secondary"
+            onClick={() => {
+              hapticLight();
+              onSelectRandom();
+            }}
+          >
+            <Dices size={16} />
+            Случайный синтез
+          </button>
         </div>
 
-        <button
-          type="button"
-          className="icon-circle-btn"
-          onClick={() => {
-            hapticLight();
-            onCycleTheme();
-          }}
-          aria-label="Сменить тему"
-          title="Сменить тему"
-        >
-          {themeMode === 'system' ? (
-            <SunMoon size={20} />
-          ) : themeMode === 'light' ? (
-            <Sun size={20} />
-          ) : (
-            <Moon size={20} />
-          )}
-        </button>
-      </div>
+        <div className="catalog-controls-bar">
+          <div className="search-box">
+            <Search size={18} color="var(--on-surface-variant)" style={{ flexShrink: 0 }} />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder="Поиск молекулы, автора, года, препарата…"
+              enterKeyHint="search"
+            />
+            {query && (
+              <button
+                type="button"
+                onClick={() => onQueryChange('')}
+                aria-label="Очистить"
+                style={{ color: 'var(--on-surface-variant)', display: 'flex' }}
+              >
+                <X size={17} />
+              </button>
+            )}
+          </div>
 
-      <div className="search-box-wrap">
-        <div className="search-box">
-          <Search size={19} color="var(--on-surface-variant)" style={{ flexShrink: 0 }} />
-          <input
-            type="search"
-            className="search-input"
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Поиск молекулы, автора, года, препарата..."
-            enterKeyHint="search"
-          />
-          {query && (
-            <button type="button" onClick={() => onQueryChange('')} aria-label="Очистить">
-              <X size={18} color="var(--on-surface-variant)" />
+          <div className="chips-row">
+            <button
+              type="button"
+              className={`chip ${filter === 'all' ? 'selected' : ''}`}
+              onClick={() => onFilterChange('all')}
+            >
+              Все ({totalCount})
             </button>
-          )}
+            <button
+              type="button"
+              className={`chip ${filter === 'drugs' ? 'selected' : ''}`}
+              onClick={() => onFilterChange('drugs')}
+            >
+              <Pill size={14} />
+              Лекарства ({drugCount})
+            </button>
+            <button
+              type="button"
+              className={`chip ${filter === 'natural' ? 'selected' : ''}`}
+              onClick={() => onFilterChange('natural')}
+            >
+              Природные ({naturalCount})
+            </button>
+            <button
+              ref={sortBtnRef}
+              type="button"
+              className={`chip ${sort !== 'name_asc' ? 'selected' : ''}`}
+              onClick={openSortMenu}
+            >
+              <ArrowUpDown size={14} />
+              {sortLabel}
+            </button>
+          </div>
         </div>
-      </div>
-
-      <div className="chips-row">
-        <button
-          type="button"
-          className={`chip-btn ${filter === 'all' ? 'selected' : ''}`}
-          onClick={() => onFilterChange('all')}
-        >
-          Все ({totalCount})
-        </button>
-        <button
-          type="button"
-          className={`chip-btn ${filter === 'drugs' ? 'selected' : ''}`}
-          onClick={() => onFilterChange('drugs')}
-        >
-          <Pill size={15} />
-          Лекарства ({drugCount})
-        </button>
-        <button
-          type="button"
-          className={`chip-btn ${filter === 'natural' ? 'selected' : ''}`}
-          onClick={() => onFilterChange('natural')}
-        >
-          Природные ({naturalCount})
-        </button>
-
-        <button
-          ref={sortBtnRef}
-          type="button"
-          className={`chip-btn ${sort !== 'name_asc' ? 'selected-secondary' : ''}`}
-          onClick={openSortMenu}
-        >
-          <ArrowUpDown size={15} />
-          {sortLabel}
-        </button>
       </div>
 
       {sortOpen && (
@@ -252,53 +237,45 @@ export const CatalogScreen: React.FC<CatalogScreenProps> = ({
           </div>
         </div>
       ) : (
-        <div ref={listRef} className="catalog-list" onScroll={handleScroll}>
-          {visibleItems.map((item) => {
-            const isRandom = item.path === selectedRandomPath;
-            return (
-              <CatalogCard
-                key={item.path}
-                item={item}
-                isFavorite={favorites.has(item.path)}
-                isCompleted={completed.has(item.path)}
-                isDark={isDark}
-                adaptiveDark={adaptiveDark}
-                isHighlighted={isRandom}
-                trailingBadge={isRandom ? 'Случайный' : null}
-                onToggleFavorite={onToggleFavorite}
-                onToggleCompleted={onToggleCompleted}
-                onOpen={onOpenItem}
-                cardRef={(el) => {
-                  if (el) cardRefs.current.set(item.path, el);
-                  else cardRefs.current.delete(item.path);
-                }}
-              />
-            );
-          })}
+        <div ref={listRef} className="catalog-grid-scroll" onScroll={handleScroll}>
+          <div className="catalog-grid">
+            {visibleItems.map((item) => {
+              const isRandom = item.path === selectedRandomPath;
+              return (
+                <CatalogCard
+                  key={item.path}
+                  item={item}
+                  isFavorite={favorites.has(item.path)}
+                  isCompleted={completed.has(item.path)}
+                  isDark={isDark}
+                  adaptiveDark={adaptiveDark}
+                  isHighlighted={isRandom}
+                  trailingBadge={isRandom ? 'Случайный' : null}
+                  onToggleFavorite={onToggleFavorite}
+                  onToggleCompleted={onToggleCompleted}
+                  onOpen={onOpenItem}
+                  cardRef={(el) => {
+                    if (el) cardRefs.current.set(item.path, el);
+                    else cardRefs.current.delete(item.path);
+                  }}
+                />
+              );
+            })}
+          </div>
           {visibleCount < items.length && (
-            <button
-              type="button"
-              className="load-more-btn"
-              onClick={() => setVisibleCount((c) => Math.min(items.length, c + PAGE_STEP))}
-            >
-              Показать ещё ({items.length - visibleCount})
-            </button>
+            <div style={{ maxWidth: 1400, margin: '0 auto', padding: '0 24px 32px' }}>
+              <button
+                type="button"
+                className="btn-cta-secondary"
+                style={{ width: '100%' }}
+                onClick={() => setVisibleCount((c) => Math.min(items.length, c + PAGE_STEP))}
+              >
+                Показать ещё ({items.length - visibleCount})
+              </button>
+            </div>
           )}
         </div>
       )}
-
-      <button
-        type="button"
-        className="fab-random"
-        onClick={() => {
-          hapticLight();
-          onSelectRandom();
-        }}
-        aria-label="Выбрать случайный синтез"
-        title="Выбрать случайный синтез"
-      >
-        <Dices size={24} />
-      </button>
     </div>
   );
 };
