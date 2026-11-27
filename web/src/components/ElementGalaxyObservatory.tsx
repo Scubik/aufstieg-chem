@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { ELEMENT_GALAXIES, type ElementGalaxyConfig, type GalaxyElementStar } from '../data/galaxies';
 import type { GalaxyId } from '../types/models';
 import { getElementPixelSprite } from './pixelElementSprites';
@@ -22,13 +22,6 @@ interface ProjectedIslandHit {
   y: number;
   r: number;
   galaxy: ElementGalaxyConfig;
-}
-
-interface TooltipState {
-  x: number;
-  y: number;
-  galaxy: ElementGalaxyConfig;
-  element: GalaxyElementStar;
 }
 
 const ISLAND_POSITIONS: Record<
@@ -69,6 +62,7 @@ const FLAG_FRAMES: Array<Array<[number, number]>> = [
 ];
 
 interface ElementOrbitSeed {
+  element: GalaxyElementStar;
   angleOffset: number;
   rxMult: number;
   ryMult: number;
@@ -79,6 +73,47 @@ interface ElementOrbitSeed {
   bobPhase: number;
   bobFreq: number;
   bobAmp: number;
+  daySprite: HTMLCanvasElement;
+  nightSprite: HTMLCanvasElement;
+}
+
+const glowCache = new Map<string, HTMLCanvasElement>();
+
+function getGlowCanvas(color: string, radius: number): HTMLCanvasElement {
+  const key = `${color}:${radius}`;
+  const cached = glowCache.get(key);
+  if (cached) return cached;
+  const size = radius * 2;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const gctx = c.getContext('2d')!;
+  const grad = gctx.createRadialGradient(radius, radius, 1, radius, radius, radius);
+  grad.addColorStop(0, color);
+  grad.addColorStop(1, 'transparent');
+  gctx.fillStyle = grad;
+  gctx.fillRect(0, 0, size, size);
+  glowCache.set(key, c);
+  return c;
+}
+
+function bakeNightSprite(img: HTMLImageElement): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  const bctx = c.getContext('2d')!;
+  bctx.imageSmoothingEnabled = false;
+  bctx.drawImage(img, 0, 0);
+  const data = bctx.getImageData(0, 0, c.width, c.height);
+  const px = data.data;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i + 3] === 0) continue;
+    px[i] = Math.round(px[i] * 0.6);
+    px[i + 1] = Math.round(px[i + 1] * 0.63);
+    px[i + 2] = Math.round(px[i + 2] * 0.7);
+  }
+  bctx.putImageData(data, 0, 0);
+  return c;
 }
 
 function createRng(seed: number) {
@@ -106,8 +141,7 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
   onOpenChain,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [tooltip, setTooltip] = useState<TooltipState | null>(null);
-  const [cursorPointer, setCursorPointer] = useState(false);
+  const tooltipElRef = useRef<HTMLDivElement | null>(null);
 
   const isDarkRef = useRef(isDark);
   isDarkRef.current = isDark;
@@ -123,6 +157,8 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
 
     let cancelled = false;
     let rafId = 0;
+    let inViewport = true;
+    let pageVisible = document.visibilityState !== 'hidden';
 
     const spriteEntries: Array<[string, string]> = [
       ['mountains-far', './art/mountains-far.png'],
@@ -138,11 +174,21 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
     ];
 
     const sprites = new Map<string, HTMLImageElement>();
+    const nightSprites = new Map<string, HTMLCanvasElement>();
     Promise.all(
       spriteEntries.map(async ([key, url]) => {
         try {
           const img = await loadSprite(url);
-          if (!cancelled) sprites.set(key, img);
+          if (cancelled) return;
+          sprites.set(key, img);
+          if (
+            key === 'island-s' ||
+            key === 'island-p' ||
+            key === 'island-d' ||
+            key === 'island-platinum-noble'
+          ) {
+            nightSprites.set(key, bakeNightSprite(img));
+          }
         } catch {
           // ignore
         }
@@ -167,13 +213,14 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
     ];
 
     const orbitRng = createRng(918273);
-    const orbitSeeds = new Map<string, ElementOrbitSeed>();
+    const galaxyOrbits = new Map<GalaxyId, ElementOrbitSeed[]>();
     const shellRadii = [0.76, 1.04, 1.32];
     const shellYOffsets = [-8, 1, 9];
     const shellTilts = [-0.26, 0.16, -0.1];
     const shellSpeeds = [1.12, 0.86, 0.68];
 
     for (const galaxy of ELEMENT_GALAXIES) {
+      const isNightLit = galaxy.id === 'noble-gases' || galaxy.id === 'f';
       const count = galaxy.stars.length;
       const shellCount = count > 14 ? 3 : count > 7 ? 2 : 1;
       const shells: number[][] = Array.from({ length: shellCount }, () => []);
@@ -181,6 +228,7 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
         shells[idx % shellCount].push(idx);
       });
 
+      const seeds: ElementOrbitSeed[] = [];
       shells.forEach((memberIndices, shellIdx) => {
         const tilt = shellTilts[shellIdx % shellTilts.length];
         const cosTilt = Math.cos(tilt);
@@ -194,7 +242,12 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
         memberIndices.forEach((starIdx, slotIdx) => {
           const el = galaxy.stars[starIdx];
           const base = (slotIdx / memberIndices.length) * Math.PI * 2 + phaseShift;
-          orbitSeeds.set(`${galaxy.id}:${el.symbol}`, {
+          const daySprite = getElementPixelSprite(el.visualKind, el.shape, el.colors, false);
+          const nightSprite = isNightLit
+            ? daySprite
+            : getElementPixelSprite(el.visualKind, el.shape, el.colors, true);
+          seeds.push({
+            element: el,
             angleOffset: base + (orbitRng() - 0.5) * 0.32,
             rxMult,
             ryMult,
@@ -205,13 +258,18 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
             bobPhase: orbitRng() * Math.PI * 2,
             bobFreq: 1.0 + orbitRng() * 1.1,
             bobAmp: 1.5 + orbitRng() * 0.7,
+            daySprite,
+            nightSprite,
           });
         });
       });
+      galaxyOrbits.set(galaxy.id, seeds);
     }
 
     let width = 760;
     let height = 490;
+    let skyGradDark: CanvasGradient | null = null;
+    let skyGradLight: CanvasGradient | null = null;
     let targetMouseX = 0;
     let targetMouseY = 0;
     let smoothMouseX = 0;
@@ -221,15 +279,31 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
     let islandHits: ProjectedIslandHit[] = [];
     let hoveredStone: ProjectedStoneHit | null = null;
     let hoveredIsland: ElementGalaxyConfig | null = null;
+    let lastHasHover = false;
+
+    const rebuildSkyGradients = () => {
+      const darkG = ctx.createLinearGradient(0, 0, 0, height);
+      darkG.addColorStop(0, '#040914');
+      darkG.addColorStop(0.6, '#081529');
+      darkG.addColorStop(1, '#0e2444');
+      skyGradDark = darkG;
+
+      const lightG = ctx.createLinearGradient(0, 0, 0, height);
+      lightG.addColorStop(0, '#60a5fa');
+      lightG.addColorStop(0.55, '#93c5fd');
+      lightG.addColorStop(1, '#dbeafe');
+      skyGradLight = lightG;
+    };
 
     const resize = () => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       width = canvas.clientWidth || 760;
       height = canvas.clientHeight || 490;
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(height * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.imageSmoothingEnabled = false;
+      rebuildSkyGradients();
     };
 
     const drawTiledMountains = (
@@ -243,14 +317,12 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       const drawH = img.height * scale;
       const y = Math.round(height - drawH);
       let startX = Math.round(((offsetX % drawW) + drawW) % drawW) - drawW;
-      ctx.save();
       ctx.globalAlpha = alpha;
-      ctx.imageSmoothingEnabled = false;
       while (startX < width) {
         ctx.drawImage(img, Math.round(startX), y, drawW, drawH);
         startX += drawW;
       }
-      ctx.restore();
+      ctx.globalAlpha = 1;
     };
 
     const drawPixelSun = (t: number) => {
@@ -258,38 +330,35 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       const sy = Math.round(52 + smoothMouseY * 3);
       const pulse = Math.sin(t * 1.8) > 0 ? 1 : 0;
 
-      ctx.save();
-      // Outer warm pixel halo
       ctx.fillStyle = 'rgba(253, 224, 71, 0.25)';
       ctx.fillRect(sx - 22 - pulse * 2, sy - 22 - pulse * 2, 44 + pulse * 4, 44 + pulse * 4);
-      // Sun rays
       ctx.fillStyle = '#fde047';
       ctx.fillRect(sx - 24 - pulse * 3, sy - 2, 6, 4);
       ctx.fillRect(sx + 18 + pulse * 3, sy - 2, 6, 4);
       ctx.fillRect(sx - 2, sy - 24 - pulse * 3, 4, 6);
       ctx.fillRect(sx - 2, sy + 18 + pulse * 3, 4, 6);
-      // Sun body
       ctx.fillStyle = '#facc15';
       ctx.fillRect(sx - 14, sy - 10, 28, 20);
       ctx.fillRect(sx - 10, sy - 14, 20, 28);
-      // Bright center
       ctx.fillStyle = '#fef9c3';
       ctx.fillRect(sx - 8, sy - 8, 16, 16);
-      ctx.restore();
     };
 
     const drawDayCloud = (cx: number, cy: number, sc: number) => {
-      ctx.save();
       ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
       ctx.fillRect(cx - 10 * sc, cy - 2 * sc, 20 * sc, 5 * sc);
       ctx.fillRect(cx - 7 * sc, cy - 5 * sc, 12 * sc, 4 * sc);
       ctx.fillRect(cx - 3 * sc, cy - 7 * sc, 7 * sc, 3 * sc);
       ctx.fillStyle = 'rgba(186, 230, 253, 0.7)';
       ctx.fillRect(cx - 9 * sc, cy + 2 * sc, 18 * sc, 2 * sc);
-      ctx.restore();
     };
 
     const draw = (now: number) => {
+      if (cancelled || !inViewport || !pageVisible) {
+        rafId = 0;
+        return;
+      }
+
       const t = now * 0.001;
       const dark = isDarkRef.current;
 
@@ -297,29 +366,18 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       smoothMouseY += (targetMouseY - smoothMouseY) * 0.06;
 
       ctx.imageSmoothingEnabled = false;
-      ctx.clearRect(0, 0, width, height);
 
       // 1. Sky (Night vs Clear Day)
-      const skyGrad = ctx.createLinearGradient(0, 0, 0, height);
-      if (dark) {
-        skyGrad.addColorStop(0, '#040914');
-        skyGrad.addColorStop(0.6, '#081529');
-        skyGrad.addColorStop(1, '#0e2444');
-      } else {
-        skyGrad.addColorStop(0, '#60a5fa');
-        skyGrad.addColorStop(0.55, '#93c5fd');
-        skyGrad.addColorStop(1, '#dbeafe');
-      }
-      ctx.fillStyle = skyGrad;
+      ctx.fillStyle = (dark ? skyGradDark : skyGradLight) ?? '#040914';
       ctx.fillRect(0, 0, width, height);
 
       // 2. Night stars OR Day sun + clouds
       if (dark) {
-        for (const st of skyStars) {
+        for (let i = 0; i < skyStars.length; i++) {
+          const st = skyStars[i];
           const sx = Math.round(st.rx * width + smoothMouseX * 8);
           const sy = Math.round(st.ry * height + smoothMouseY * 5);
           const tw = 0.45 + 0.55 * Math.sin(t * st.speed + st.phase);
-          ctx.save();
           ctx.globalAlpha = st.baseAlpha * tw;
           ctx.fillStyle = st.isCross ? '#e0f2fe' : '#bae6fd';
           if (st.isCross && tw > 0.72) {
@@ -328,11 +386,12 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
           } else {
             ctx.fillRect(sx, sy, st.pxSize, st.pxSize);
           }
-          ctx.restore();
         }
+        ctx.globalAlpha = 1;
       } else {
         drawPixelSun(t);
-        for (const cl of dayClouds) {
+        for (let i = 0; i < dayClouds.length; i++) {
+          const cl = dayClouds[i];
           const cx = Math.round(((cl.rx + t * cl.speed) % 1.15 - 0.08) * width);
           const cy = Math.round(cl.ry * height);
           drawDayCloud(cx, cy, cl.scale);
@@ -352,7 +411,6 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       const nextStoneHits: ProjectedStoneHit[] = [];
       const nextIslandHits: ProjectedIslandHit[] = [];
       const islandScale = width < 640 ? 2 : 3;
-      const objScale = width < 640 ? 2 : 3;
 
       ELEMENT_GALAXIES.forEach((galaxy, gi) => {
         const pos = ISLAND_POSITIONS[galaxy.id];
@@ -370,15 +428,16 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
         const orbitRx = pos.orbitRx * orbitScale;
         const orbitRy = pos.orbitRy * orbitScale;
 
+        const seeds = galaxyOrbits.get(galaxy.id) ?? [];
         const projectedItems: Array<{
           x: number;
           y: number;
           z: number;
-          element: GalaxyElementStar;
-        }> = [];
+          seed: ElementOrbitSeed;
+        }> = new Array(seeds.length);
 
-        galaxy.stars.forEach((el) => {
-          const seed = orbitSeeds.get(`${galaxy.id}:${el.symbol}`)!;
+        for (let i = 0; i < seeds.length; i++) {
+          const seed = seeds[i];
           const speed = galaxy.spinSpeed * 2.1 * seed.speedMult;
           const ang = seed.angleOffset + t * speed;
           const ux = Math.cos(ang) * orbitRx * seed.rxMult;
@@ -389,14 +448,13 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
             uy * seed.cosTilt +
             seed.yOffset +
             Math.sin(t * seed.bobFreq + seed.bobPhase) * seed.bobAmp;
-          const oz = Math.sin(ang);
-          projectedItems.push({
+          projectedItems[i] = {
             x: cx + ox,
             y: cy + oy,
-            z: oz,
-            element: el,
-          });
-        });
+            z: Math.sin(ang),
+            seed,
+          };
+        }
 
         // Pairwise 2D separation so orbiting stones don't overlap each other
         const minSep = isDenseIsland ? (width < 640 ? 14 : 20) : width < 640 ? 20 : 28;
@@ -424,26 +482,25 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
 
         const backItems: typeof projectedItems = [];
         const frontItems: typeof projectedItems = [];
-        for (const item of projectedItems) {
-          const snapped = {
-            ...item,
-            x: Math.round(item.x),
-            y: Math.round(item.y),
-          };
-          if (item.z < 0) backItems.push(snapped);
-          else frontItems.push(snapped);
+        for (let i = 0; i < projectedItems.length; i++) {
+          const item = projectedItems[i];
+          item.x = Math.round(item.x);
+          item.y = Math.round(item.y);
+          if (item.z < 0) backItems.push(item);
+          else frontItems.push(item);
         }
 
         backItems.sort((a, b) => a.z - b.z);
         frontItems.sort((a, b) => a.z - b.z);
 
         const drawOrbitElement = (s: (typeof backItems)[number], isFront: boolean) => {
-          const sprite = getElementPixelSprite(s.element.visualKind, s.element.shape, s.element.colors);
-          const hasChain = Boolean(s.element.chainId);
+          const el = s.seed.element;
+          const sprite = dark ? s.seed.nightSprite : s.seed.daySprite;
+          const hasChain = Boolean(el.chainId);
           const isHov =
             hoveredStone &&
             hoveredStone.galaxy.id === galaxy.id &&
-            hoveredStone.element.symbol === s.element.symbol;
+            hoveredStone.element.symbol === el.symbol;
 
           const sc = isHov ? baseObjScale + 0.75 : baseObjScale;
           const sw = Math.round(sprite.width * sc);
@@ -451,39 +508,21 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
           const sx = Math.round(s.x - sw / 2);
           const sy = Math.round(s.y - sh / 2);
 
-          ctx.save();
-          ctx.imageSmoothingEnabled = false;
-          if (s.element.visualKind === 'gas-cloud') {
+          // Cached glow sprite for noble gas tubes or f-block nuclei at night
+          if (el.visualKind === 'gas-tube') {
+            const glowR = isFront ? 16 : 11;
+            ctx.globalAlpha = isFront ? (dark ? 0.45 : 0.3) : 0.2;
+            ctx.drawImage(getGlowCanvas(el.colors[1], glowR), s.x - glowR, s.y - glowR);
+          } else if (dark && el.visualKind === 'nucleus') {
+            const glowR = isFront ? 13 : 9;
+            ctx.globalAlpha = isFront ? 0.32 : 0.18;
+            ctx.drawImage(getGlowCanvas(el.colors[2], glowR), s.x - glowR, s.y - glowR);
+          }
+
+          if (el.visualKind === 'gas-cloud') {
             ctx.globalAlpha = isFront ? 0.92 : 0.62;
           } else {
             ctx.globalAlpha = isFront ? (hasChain ? 1 : 0.85) : hasChain ? 0.68 : 0.5;
-          }
-
-          // Subtle discharge glow for noble gas tubes, or core glow for f-block nuclei at night
-          if (s.element.visualKind === 'gas-tube') {
-            const glowR = isFront ? 16 : 11;
-            const gGrad = ctx.createRadialGradient(s.x, s.y, 1, s.x, s.y, glowR);
-            gGrad.addColorStop(0, s.element.colors[1]);
-            gGrad.addColorStop(1, 'transparent');
-            ctx.save();
-            ctx.globalAlpha = isFront ? (dark ? 0.45 : 0.3) : 0.2;
-            ctx.fillStyle = gGrad;
-            ctx.beginPath();
-            ctx.arc(s.x, s.y, glowR, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
-          } else if (dark && s.element.visualKind === 'nucleus') {
-            const glowR = isFront ? 13 : 9;
-            const gGrad = ctx.createRadialGradient(s.x, s.y, 1, s.x, s.y, glowR);
-            gGrad.addColorStop(0, s.element.colors[2]);
-            gGrad.addColorStop(1, 'transparent');
-            ctx.save();
-            ctx.globalAlpha = isFront ? 0.32 : 0.18;
-            ctx.fillStyle = gGrad;
-            ctx.beginPath();
-            ctx.arc(s.x, s.y, glowR, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.restore();
           }
 
           if (isHov) {
@@ -492,38 +531,31 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
             ctx.strokeRect(sx - 3, sy - 3, sw + 6, sh + 6);
           }
 
-          if (dark && !isNightLit) {
-            ctx.filter = 'brightness(0.64) saturate(0.82) contrast(1.06)';
-          }
           ctx.drawImage(sprite, sx, sy, sw, sh);
-          ctx.restore();
 
           nextStoneHits.push({
             x: s.x,
             y: s.y,
             size: Math.max(15, Math.max(sw, sh) * 0.72),
             galaxy,
-            element: s.element,
+            element: el,
           });
         };
 
-        for (const s of backItems) drawOrbitElement(s, false);
+        for (let i = 0; i < backItems.length; i++) drawOrbitElement(backItems[i], false);
+        ctx.globalAlpha = 1;
 
-        const islandImg = sprites.get(`island-${galaxy.id}`);
-        const iw = (islandImg?.width || 32) * islandScale;
-        const ih = (islandImg?.height || 32) * islandScale;
+        const islandKey = `island-${galaxy.id}`;
+        const islandSource =
+          dark && !isNightLit ? (nightSprites.get(islandKey) ?? sprites.get(islandKey)) : sprites.get(islandKey);
+        const iw = (islandSource?.width || 32) * islandScale;
+        const ih = (islandSource?.height || 32) * islandScale;
         const ix = Math.round(cx - iw / 2);
         const iy = Math.round(cy - ih / 2);
 
-        ctx.save();
-        ctx.imageSmoothingEnabled = false;
-        if (dark && !isNightLit) {
-          ctx.filter = 'brightness(0.64) saturate(0.82) contrast(1.06)';
+        if (islandSource) {
+          ctx.drawImage(islandSource, ix, iy, iw, ih);
         }
-        if (islandImg && islandImg.complete && islandImg.width > 0) {
-          ctx.drawImage(islandImg, ix, iy, iw, ih);
-        }
-        ctx.restore();
 
         nextIslandHits.push({
           x: cx,
@@ -532,10 +564,10 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
           galaxy,
         });
 
-        for (const s of frontItems) drawOrbitElement(s, true);
+        for (let i = 0; i < frontItems.length; i++) drawOrbitElement(frontItems[i], true);
+        ctx.globalAlpha = 1;
 
         // Family label
-        ctx.save();
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         ctx.font = `${isGalHovered ? '700' : '600'} 12px "Space Grotesk", "Inter", sans-serif`;
@@ -547,7 +579,6 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
             ? 'rgba(226, 232, 240, 0.88)'
             : 'rgba(15, 23, 42, 0.88)';
         ctx.fillText(galaxy.label, cx, Math.round(cy + ih * 0.5 + 14));
-        ctx.restore();
       });
 
       // 5. Near mountains (day or night) + highlighted summit peak with waving Aufstieg flag
@@ -579,18 +610,15 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
           const peakY = baseY + peakPy * mtnScale;
           const px = mtnScale;
 
-          ctx.save();
-          ctx.imageSmoothingEnabled = false;
-
-          // Subtle summit glow in dark mode so the flagged peak stands out
           if (dark) {
-            const gGrad = ctx.createRadialGradient(bestPeakX, peakY - px * 2, 2, bestPeakX, peakY - px * 2, px * 10);
-            gGrad.addColorStop(0, 'rgba(125, 211, 252, 0.28)');
-            gGrad.addColorStop(1, 'transparent');
-            ctx.fillStyle = gGrad;
-            ctx.beginPath();
-            ctx.arc(bestPeakX, peakY - px * 2, px * 10, 0, Math.PI * 2);
-            ctx.fill();
+            const glowR = px * 10;
+            ctx.globalAlpha = 0.28;
+            ctx.drawImage(
+              getGlowCanvas('#7dd3fc', glowR),
+              bestPeakX - glowR,
+              peakY - px * 2 - glowR,
+            );
+            ctx.globalAlpha = 1;
           }
 
           // Crisp highlighted snow-crest cap on the chosen summit
@@ -610,11 +638,11 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
 
           // Waving blue pixel flag (exact 4-frame cycle from pixel_art.py)
           const frame = FLAG_FRAMES[Math.floor(t * 4.5) % FLAG_FRAMES.length];
-          for (const [dx, dy] of frame) {
+          for (let i = 0; i < frame.length; i++) {
+            const [dx, dy] = frame[i];
             ctx.fillStyle = dx >= 4 ? '#5f9ef0' : '#3e7ad0';
             ctx.fillRect(bestPeakX + dx * px, peakY + dy * px, px, px);
           }
-          ctx.restore();
         }
       }
 
@@ -624,10 +652,17 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       rafId = requestAnimationFrame(draw);
     };
 
+    const ensureLoop = () => {
+      if (!cancelled && inViewport && pageVisible && rafId === 0) {
+        rafId = requestAnimationFrame(draw);
+      }
+    };
+
     const pickAt = (mx: number, my: number) => {
       let bestStone: ProjectedStoneHit | null = null;
       let bestSDist = Infinity;
-      for (const s of stoneHits) {
+      for (let i = 0; i < stoneHits.length; i++) {
+        const s = stoneHits[i];
         const d = Math.hypot(mx - s.x, my - s.y);
         if (d <= s.size && d < bestSDist) {
           bestSDist = d;
@@ -640,7 +675,8 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
 
       let bestIsland: ElementGalaxyConfig | null = null;
       let bestIDist = Infinity;
-      for (const isl of islandHits) {
+      for (let i = 0; i < islandHits.length; i++) {
+        const isl = islandHits[i];
         const d = Math.hypot(mx - isl.x, my - isl.y);
         if (d <= isl.r && d < bestIDist) {
           bestIDist = d;
@@ -648,6 +684,22 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
         }
       }
       return { stone: null, galaxy: bestIsland };
+    };
+
+    const updateTooltipDom = (stone: ProjectedStoneHit | null, clientX: number, clientY: number) => {
+      const el = tooltipElRef.current;
+      if (!el) return;
+      if (stone) {
+        const tx = Math.min(window.innerWidth - 64, clientX + 12);
+        const ty = Math.max(10, clientY - 30);
+        if (el.textContent !== stone.element.symbol) {
+          el.textContent = stone.element.symbol;
+        }
+        el.style.display = 'block';
+        el.style.transform = `translate3d(${tx}px, ${ty}px, 0)`;
+      } else {
+        el.style.display = 'none';
+      }
     };
 
     const handleMouseMove = (e: MouseEvent) => {
@@ -660,18 +712,12 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       const { stone, galaxy } = pickAt(mx, my);
       hoveredStone = stone;
       hoveredIsland = galaxy;
-      setCursorPointer(Boolean(stone || galaxy));
-
-      if (stone) {
-        setTooltip({
-          x: e.clientX,
-          y: e.clientY,
-          galaxy: stone.galaxy,
-          element: stone.element,
-        });
-      } else {
-        setTooltip(null);
+      const hasHover = Boolean(stone || galaxy);
+      if (hasHover !== lastHasHover) {
+        lastHasHover = hasHover;
+        canvas.style.cursor = hasHover ? 'pointer' : 'default';
       }
+      updateTooltipDom(stone, e.clientX, e.clientY);
     };
 
     const handleMouseLeave = () => {
@@ -679,8 +725,11 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       targetMouseY = 0;
       hoveredStone = null;
       hoveredIsland = null;
-      setCursorPointer(false);
-      setTooltip(null);
+      if (lastHasHover) {
+        lastHasHover = false;
+        canvas.style.cursor = 'default';
+      }
+      updateTooltipDom(null, 0, 0);
     };
 
     const handleClick = (e: MouseEvent) => {
@@ -695,8 +744,23 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       }
     };
 
+    const io = new IntersectionObserver(
+      (entries) => {
+        inViewport = entries.some((entry) => entry.isIntersecting);
+        if (inViewport) ensureLoop();
+      },
+      { threshold: 0.01 },
+    );
+    io.observe(canvas);
+
+    const handleVisibility = () => {
+      pageVisible = document.visibilityState !== 'hidden';
+      if (pageVisible) ensureLoop();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     resize();
-    rafId = requestAnimationFrame(draw);
+    ensureLoop();
     window.addEventListener('resize', resize);
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mouseleave', handleMouseLeave);
@@ -704,7 +768,9 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
 
     return () => {
       cancelled = true;
-      cancelAnimationFrame(rafId);
+      if (rafId) cancelAnimationFrame(rafId);
+      io.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('resize', resize);
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mouseleave', handleMouseLeave);
@@ -713,19 +779,9 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
   }, []);
 
   return (
-    <div className="galaxy-stage" style={{ cursor: cursorPointer ? 'pointer' : 'default' }}>
+    <div className="galaxy-stage">
       <canvas ref={canvasRef} className="galaxy-canvas" />
-      {tooltip && (
-        <div
-          className="galaxy-tooltip-pill"
-          style={{
-            left: Math.min(window.innerWidth - 64, tooltip.x + 12),
-            top: Math.max(10, tooltip.y - 30),
-          }}
-        >
-          {tooltip.element.symbol}
-        </div>
-      )}
+      <div ref={tooltipElRef} className="galaxy-tooltip-pill" style={{ display: 'none' }} />
     </div>
   );
 };

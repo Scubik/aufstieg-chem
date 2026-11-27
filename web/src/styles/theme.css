@@ -121,9 +121,7 @@ input {
   position: sticky;
   top: 0;
   z-index: 30;
-  background: var(--surface-glass);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--surface);
   border-bottom: 1px solid var(--outline-variant);
   padding-top: env(safe-area-inset-top, 0px);
   flex-shrink: 0;
@@ -469,8 +467,11 @@ input {
 
 .galaxy-tooltip-pill {
   position: fixed;
+  top: 0;
+  left: 0;
   z-index: 60;
   pointer-events: none;
+  will-change: transform;
   padding: 4px 10px;
   border-radius: 8px;
   background: var(--surface);
@@ -733,6 +734,8 @@ input {
   cursor: pointer;
   transition: transform 0.12s ease, border-color 0.15s ease, box-shadow 0.15s ease;
   box-shadow: var(--shadow-sm);
+  content-visibility: auto;
+  contain-intrinsic-size: 96px;
 }
 
 .catalog-card:hover {
@@ -857,6 +860,8 @@ input {
   cursor: pointer;
   box-shadow: var(--shadow-sm);
   transition: transform 0.14s ease, border-color 0.14s ease, box-shadow 0.14s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: 96px;
 }
 
 .element-card:hover {
@@ -923,8 +928,7 @@ input {
 }
 
 .chain-topbar {
-  background: var(--surface-glass);
-  backdrop-filter: blur(12px);
+  background: var(--surface);
   border-bottom: 1px solid var(--outline-variant);
   padding: 10px 20px;
 }
@@ -1228,8 +1232,7 @@ input {
 }
 
 .synthesis-topbar {
-  background: var(--surface-glass);
-  backdrop-filter: blur(12px);
+  background: var(--surface);
   border-bottom: 1px solid var(--outline-variant);
   padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
   display: flex;
@@ -1979,8 +1982,7 @@ input {
 
   .mobile-bottom-nav {
     display: flex;
-    background: var(--surface-glass);
-    backdrop-filter: blur(14px);
+    background: var(--surface);
     border-top: 1px solid var(--outline-variant);
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
     justify-content: space-around;

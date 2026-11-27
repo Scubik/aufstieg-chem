@@ -274,16 +274,35 @@ const SHAPE_GRIDS: Record<ElementShape, string[]> = {
   ],
 };
 
+function dimHexColor(hex: string, factor = 0.62): string {
+  const clean = hex.replace('#', '');
+  if (clean.length !== 6) return hex;
+  const r = parseInt(clean.slice(0, 2), 16);
+  const g = parseInt(clean.slice(2, 4), 16);
+  const b = parseInt(clean.slice(4, 6), 16);
+  const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+  const mix = (c: number) => Math.max(0, Math.min(255, Math.round((c * 0.82 + lum * 0.18) * factor)));
+  const toHex = (n: number) => n.toString(16).padStart(2, '0');
+  return `#${toHex(mix(r))}${toHex(mix(g))}${toHex(mix(b))}`;
+}
+
 export function getElementPixelSprite(
   kind: ElementVisualKind,
   shape: ElementShape,
   colors: [string, string, string],
+  nightDim = false,
 ): HTMLCanvasElement {
-  const key = `${kind}:${shape}:${colors.join(',')}`;
+  const key = `${kind}:${shape}:${colors.join(',')}:${nightDim ? 'n' : 'd'}`;
   const cached = spriteCache.get(key);
   if (cached) return cached;
 
-  const [cDark, cMid, cLight] = colors;
+  const [cDark, cMid, cLight] = nightDim
+    ? ([dimHexColor(colors[0], 0.62), dimHexColor(colors[1], 0.62), dimHexColor(colors[2], 0.62)] as [
+        string,
+        string,
+        string,
+      ])
+    : colors;
   const canvas = document.createElement('canvas');
   const rows = SHAPE_GRIDS[shape] ?? SHAPE_GRIDS.geode;
   canvas.width = rows[0]?.length ?? 9;

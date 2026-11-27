@@ -19,7 +19,7 @@ interface CatalogCardProps {
   cardRef?: (el: HTMLDivElement | null) => void;
 }
 
-export const CatalogCard: React.FC<CatalogCardProps> = ({
+export const CatalogCard: React.FC<CatalogCardProps> = React.memo(({
   item,
   isFavorite,
   isCompleted,
@@ -156,4 +156,4 @@ export const CatalogCard: React.FC<CatalogCardProps> = ({
       </div>
     </div>
   );
-};
+});
