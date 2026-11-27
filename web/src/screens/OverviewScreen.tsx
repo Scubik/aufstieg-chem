@@ -48,10 +48,10 @@ export const OverviewScreen: React.FC<OverviewScreenProps> = ({
           <div className="observatory-sidebar">
             <div>
               <h1 className="hero-headline" style={{ marginTop: 0 }}>
-                Синтезы и&nbsp;химия элементов
+                Тоталсинтезы и&nbsp;химия элементов
               </h1>
               <p className="hero-lead">
-                Интерактивные цепочки по неорганической химии и&nbsp;база
+                Интерактивные цепочки по неорганической химии Н.&nbsp;В.&nbsp;Мещерякова и&nbsp;база
                 полных органических синтезов Chemistry By Design.
               </p>
             </div>

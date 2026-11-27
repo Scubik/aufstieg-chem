@@ -99,6 +99,8 @@ export const App: React.FC = () => {
 
   const [selectedRandomPath, setSelectedRandomPath] = useState<string | null>(null);
   const [randomScrollReq, setRandomScrollReq] = useState(0);
+  const [selectedRandomInorganicId, setSelectedRandomInorganicId] = useState<string | null>(null);
+  const [randomInorganicScrollReq, setRandomInorganicScrollReq] = useState(0);
 
   const [activeItem, setActiveItem] = useState<CatalogItem | null>(null);
   const [seqStack, setSeqStack] = useState<SequenceModel[]>([]);
@@ -420,9 +422,26 @@ export const App: React.FC = () => {
   };
 
   const handleSelectRandomInorganic = () => {
-    if (inorganicItems.length === 0) return;
-    const pick = inorganicItems[Math.floor(Math.random() * inorganicItems.length)];
-    openInorganicChain(pick.id);
+    const q = inorganicQuery.trim().toLowerCase();
+    const filteredPool = inorganicItems.filter((item) => {
+      if (inorganicGalaxy !== 'all' && item.galaxyId !== inorganicGalaxy) return false;
+      if (!q) return true;
+      return (
+        item.element.toLowerCase().includes(q) ||
+        item.title.toLowerCase().includes(q) ||
+        item.groupTitle.toLowerCase().includes(q)
+      );
+    });
+    const pool = filteredPool.length > 0 ? filteredPool : inorganicItems;
+    if (pool.length === 0) return;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    if (section === 'inorganic') {
+      setSelectedRandomInorganicId(pick.id);
+      setRandomInorganicScrollReq((n) => n + 1);
+      showToast(`Выбран элемент: ${pick.title}`);
+    } else {
+      openInorganicChain(pick.id);
+    }
   };
 
   const handleExportPdf = async (revealed: Set<number>) => {
@@ -650,6 +669,8 @@ export const App: React.FC = () => {
             favorites={inorganicFavorites}
             completed={inorganicCompleted}
             isDark={isDark}
+            selectedRandomId={selectedRandomInorganicId}
+            randomScrollRequest={randomInorganicScrollReq}
             onQueryChange={setInorganicQuery}
             onGalaxyChange={setInorganicGalaxy}
             onToggleFavorite={toggleInorganicFavorite}

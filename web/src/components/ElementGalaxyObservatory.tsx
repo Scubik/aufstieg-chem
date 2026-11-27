@@ -351,11 +351,12 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       scale: number,
       offsetX: number,
       alpha: number,
+      yOffset = 0,
     ) => {
       if (!img || !img.complete || img.width === 0) return;
       const drawW = img.width * scale;
       const drawH = img.height * scale;
-      const y = Math.round(height - drawH);
+      const y = Math.round(height - drawH + yOffset);
       let startX = Math.round(((offsetX % drawW) + drawW) % drawW) - drawW;
       ctx.globalAlpha = alpha;
       while (startX < width) {
@@ -365,11 +366,11 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       ctx.globalAlpha = 1;
     };
 
-    const drawPixelSun = (t: number, dayP: number) => {
+    const drawPixelSun = (t: number, dayP: number, isMobile: boolean) => {
       if (dayP <= 0.02) return;
       const arc = 1 - dayP;
-      const sx = Math.round(width - 74 - arc * 44 + smoothMouseX * 4);
-      const sy = Math.round(52 + arc * arc * height * 0.72 + smoothMouseY * 3);
+      const sx = Math.round(width - (isMobile ? 48 : 74) - arc * (isMobile ? 28 : 44) + smoothMouseX * 4);
+      const sy = Math.round((isMobile ? 28 : 52) + arc * arc * height * 0.72 + smoothMouseY * (isMobile ? 2 : 3));
       const pulse = Math.sin(t * 1.8) > 0 ? 1 : 0;
       const lowSun = Math.max(0, 1 - dayP / 0.65);
 
@@ -495,57 +496,79 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
         ctx.globalAlpha = 1;
       }
 
-      drawPixelSun(t, dayProgress);
+      const isMobile = width < 640;
+
+      drawPixelSun(t, dayProgress, isMobile);
 
       if (dayProgress > 0.18) {
         const cloudVis = Math.min(1, (dayProgress - 0.18) / 0.65);
         for (let i = 0; i < dayClouds.length; i++) {
           const cl = dayClouds[i];
           const cx = Math.round(((cl.rx + t * cl.speed) % 1.15 - 0.08) * width);
-          const cy = Math.round(cl.ry * height);
+          const cy = Math.round(cl.ry * height * (isMobile ? 0.85 : 1));
           drawDayCloud(cx, cy, cl.scale, cloudVis, twilight);
         }
       }
 
       // 3. Far mountains (day/night crossfade)
-      const mtnScale = width < 640 ? 2 : 3;
+      const mtnScale = 3;
+      const farYOffset = isMobile ? 14 : 0;
       const farAlpha = 0.9 + 0.02 * dayProgress;
       if (dayProgress <= 0.001) {
-        drawTiledMountains(sprites.get('mountains-far'), mtnScale, -smoothMouseX * 16, farAlpha);
+        drawTiledMountains(sprites.get('mountains-far'), mtnScale, -smoothMouseX * 16, farAlpha, farYOffset);
       } else if (dayProgress >= 0.999) {
-        drawTiledMountains(sprites.get('mountains-far-day'), mtnScale, -smoothMouseX * 16, farAlpha);
+        drawTiledMountains(sprites.get('mountains-far-day'), mtnScale, -smoothMouseX * 16, farAlpha, farYOffset);
       } else {
         drawTiledMountains(
           sprites.get('mountains-far'),
           mtnScale,
           -smoothMouseX * 16,
           farAlpha * (1 - dayProgress),
+          farYOffset,
         );
         drawTiledMountains(
           sprites.get('mountains-far-day'),
           mtnScale,
           -smoothMouseX * 16,
           farAlpha * dayProgress,
+          farYOffset,
         );
       }
 
       // 4. Floating islands + realistic orbiting element sprites
       const nextStoneHits: ProjectedStoneHit[] = [];
       const nextIslandHits: ProjectedIslandHit[] = [];
-      const islandScale = width < 640 ? 2 : 3;
+      const islandScale = 3;
 
       ELEMENT_GALAXIES.forEach((galaxy, gi) => {
         const pos = ISLAND_POSITIONS[galaxy.id];
         const isNightLit = galaxy.id === 'noble-gases' || galaxy.id === 'f';
         const isDenseIsland = galaxy.id === 's' || galaxy.id === 'p' || galaxy.id === 'd';
-        const baseObjScale = isDenseIsland ? (width < 640 ? 1.5 : 2) : width < 640 ? 2 : 3;
-        const rx = width < 520 ? 0.5 + (pos.rx - 0.5) * 0.86 : pos.rx;
+        const baseObjScale = isMobile
+          ? isDenseIsland
+            ? 1.85
+            : 2.4
+          : isDenseIsland
+            ? 2
+            : 3;
 
         const bob = Math.sin(t * pos.bobSpeed + gi * 1.35) * pos.bobAmp;
-        const cx = Math.round(rx * width + smoothMouseX * (10 + (gi % 2) * 5));
-        const cy = Math.round(pos.ry * height + bob + smoothMouseY * 6);
+        let cx: number;
+        let cy: number;
+        if (isMobile) {
+          const slotSpacing = Math.max(200, width * 0.64);
+          const trackLen = ELEMENT_GALAXIES.length * slotSpacing;
+          const paradeSpeed = 30; // px/sec left-to-right
+          const rawX = (gi * slotSpacing + t * paradeSpeed) % trackLen;
+          cx = Math.round(rawX - slotSpacing * 0.5 + smoothMouseX * 6);
+          cy = Math.round(height * 0.34 + bob + (gi % 2 === 0 ? -4 : 4));
+          if (cx < -130 || cx > width + 130) return;
+        } else {
+          cx = Math.round(pos.rx * width + smoothMouseX * (10 + (gi % 2) * 5));
+          cy = Math.round(pos.ry * height + bob + smoothMouseY * 6);
+        }
 
-        const orbitScale = width < 640 ? 0.62 : 1;
+        const orbitScale = isMobile ? 0.76 : 1;
         const orbitRx = pos.orbitRx * orbitScale;
         const orbitRy = pos.orbitRy * orbitScale;
 
@@ -722,23 +745,24 @@ export const ElementGalaxyObservatory: React.FC<ElementGalaxyObservatoryProps> =
       const nearDayImg = sprites.get('mountains-near-day');
       const nearMtnImg = dark ? nearNightImg : nearDayImg;
       const nearOffsetX = -smoothMouseX * 32;
+      const nearYOffset = isMobile ? 22 : 0;
       const nearAlpha = 0.96 + 0.02 * dayProgress;
       if (dayProgress <= 0.001) {
-        drawTiledMountains(nearNightImg, mtnScale, nearOffsetX, nearAlpha);
+        drawTiledMountains(nearNightImg, mtnScale, nearOffsetX, nearAlpha, nearYOffset);
       } else if (dayProgress >= 0.999) {
-        drawTiledMountains(nearDayImg, mtnScale, nearOffsetX, nearAlpha);
+        drawTiledMountains(nearDayImg, mtnScale, nearOffsetX, nearAlpha, nearYOffset);
       } else {
-        drawTiledMountains(nearNightImg, mtnScale, nearOffsetX, nearAlpha * (1 - dayProgress));
-        drawTiledMountains(nearDayImg, mtnScale, nearOffsetX, nearAlpha * dayProgress);
+        drawTiledMountains(nearNightImg, mtnScale, nearOffsetX, nearAlpha * (1 - dayProgress), nearYOffset);
+        drawTiledMountains(nearDayImg, mtnScale, nearOffsetX, nearAlpha * dayProgress, nearYOffset);
       }
 
       if (nearMtnImg && nearMtnImg.complete && nearMtnImg.width > 0) {
         const drawW = nearMtnImg.width * mtnScale;
         const drawH = nearMtnImg.height * mtnScale;
-        const baseY = Math.round(height - drawH);
+        const baseY = Math.round(height - drawH + nearYOffset);
         const peakPx = 41;
         const peakPy = 6;
-        const targetX = width * 0.62;
+        const targetX = width * (isMobile ? 0.5 : 0.62);
         let startX = Math.round(((nearOffsetX % drawW) + drawW) % drawW) - drawW;
         let bestPeakX: number | null = null;
         let bestDist = Infinity;

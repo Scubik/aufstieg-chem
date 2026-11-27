@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { CheckCircle2, Circle, Dices, Heart, Search, X } from 'lucide-react';
 import type { GalaxyId, InorganicChainMeta } from '../types/models';
 import { ELEMENT_GALAXIES, getGalaxyById } from '../data/galaxies';
@@ -11,6 +11,8 @@ interface InorganicCatalogScreenProps {
   favorites: Set<string>;
   completed: Set<string>;
   isDark: boolean;
+  selectedRandomId: string | null;
+  randomScrollRequest: number;
   onQueryChange: (q: string) => void;
   onGalaxyChange: (g: GalaxyId | 'all') => void;
   onToggleFavorite: (id: string) => void;
@@ -26,6 +28,8 @@ export const InorganicCatalogScreen: React.FC<InorganicCatalogScreenProps> = ({
   favorites,
   completed,
   isDark,
+  selectedRandomId,
+  randomScrollRequest,
   onQueryChange,
   onGalaxyChange,
   onToggleFavorite,
@@ -33,6 +37,9 @@ export const InorganicCatalogScreen: React.FC<InorganicCatalogScreenProps> = ({
   onOpenChain,
   onSelectRandom,
 }) => {
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const lastHandledReq = useRef(0);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return items.filter((item) => {
@@ -45,6 +52,16 @@ export const InorganicCatalogScreen: React.FC<InorganicCatalogScreenProps> = ({
       );
     });
   }, [items, query, activeGalaxy]);
+
+  useEffect(() => {
+    if (randomScrollRequest > lastHandledReq.current && selectedRandomId) {
+      lastHandledReq.current = randomScrollRequest;
+      requestAnimationFrame(() => {
+        const targetEl = cardRefs.current.get(selectedRandomId);
+        targetEl?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+    }
+  }, [randomScrollRequest, selectedRandomId]);
 
   return (
     <div className="catalog-wrap">
@@ -79,6 +96,17 @@ export const InorganicCatalogScreen: React.FC<InorganicCatalogScreenProps> = ({
               </button>
             )}
           </div>
+          <button
+            type="button"
+            className="chip chip-random"
+            onClick={() => {
+              hapticLight();
+              onSelectRandom();
+            }}
+          >
+            <Dices size={14} />
+            Случайный элемент
+          </button>
         </div>
 
         <div className="chips-row">
@@ -112,17 +140,6 @@ export const InorganicCatalogScreen: React.FC<InorganicCatalogScreenProps> = ({
               </button>
             );
           })}
-          <button
-            type="button"
-            className="chip chip-random"
-            onClick={() => {
-              hapticLight();
-              onSelectRandom();
-            }}
-          >
-            <Dices size={14} />
-            Случайный элемент
-          </button>
         </div>
       </div>
 
@@ -150,9 +167,13 @@ export const InorganicCatalogScreen: React.FC<InorganicCatalogScreenProps> = ({
               return (
                 <div
                   key={item.id}
+                  ref={(el) => {
+                    if (el) cardRefs.current.set(item.id, el);
+                    else cardRefs.current.delete(item.id);
+                  }}
                   role="button"
                   tabIndex={0}
-                  className={`element-card ${isDone ? 'completed' : ''}`}
+                  className={`element-card ${isDone ? 'completed' : ''} ${item.id === selectedRandomId ? 'highlighted' : ''}`}
                   onClick={() => {
                     hapticLight();
                     onOpenChain(item.id);

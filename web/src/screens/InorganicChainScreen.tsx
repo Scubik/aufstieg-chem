@@ -198,11 +198,6 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
   const handleSelectX = useCallback((xKey: string, focus = false) => {
     hapticLight();
     setSelectedX(xKey);
-    setRevealedKeys((prev) => {
-      const next = new Set(prev);
-      next.add(xKey);
-      return next;
-    });
     requestAnimationFrame(() => {
       pillRefs.current.get(xKey)?.scrollIntoView({
         block: 'nearest',
@@ -212,6 +207,15 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
     });
     if (focus) focusOnCompound(xKey);
   }, [focusOnCompound]);
+
+  const handleRevealX = useCallback((xKey: string) => {
+    hapticLight();
+    setRevealedKeys((prev) => {
+      const next = new Set(prev);
+      next.add(xKey);
+      return next;
+    });
+  }, []);
 
   // Keyboard shortcuts: + / - zoom, 0 fit, ArrowLeft/ArrowRight cycle X
   useEffect(() => {
@@ -528,7 +532,7 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
                     <button
                       type="button"
                       className="link-btn"
-                      onClick={() => handleSelectX(selectedX)}
+                      onClick={() => handleRevealX(selectedX)}
                     >
                       Открыть ответ
                     </button>
@@ -569,9 +573,19 @@ export const InorganicChainScreen: React.FC<InorganicChainScreenProps> = ({
                     )}
                   </>
                 ) : (
-                  <div style={{ fontSize: 13.5, color: 'var(--on-surface-variant)', padding: '8px 0' }}>
-                    Нажмите на маркер <b>X{selectedX}</b> на схеме или на кнопку «Открыть ответ», чтобы увидеть формулу и свойства.
-                  </div>
+                  <>
+                    {activeCompound.omega && (
+                      <div className="inspector-kv">
+                        <span className="inspector-kv-label">{chain.omegaLabel}, %</span>
+                        <span className="mono" style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary)' }}>
+                          {activeCompound.omega}%
+                        </span>
+                      </div>
+                    )}
+                    <div style={{ fontSize: 13, color: 'var(--on-surface-variant)', padding: '2px 0' }}>
+                      Нажмите «Открыть ответ», чтобы увидеть формулу и свойства.
+                    </div>
+                  </>
                 )}
               </div>
             ) : (

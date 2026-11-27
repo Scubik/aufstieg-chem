@@ -718,11 +718,15 @@ input {
 }
 
 .chip-random {
-  margin-left: auto;
   color: var(--primary);
   border-color: color-mix(in srgb, var(--primary) 40%, transparent);
   background: color-mix(in srgb, var(--primary-container) 55%, var(--surface));
   font-weight: 600;
+}
+
+.catalog-controls-bar .chip-random {
+  height: 38px;
+  flex-shrink: 0;
 }
 
 .chip-random:hover {
@@ -953,6 +957,13 @@ input {
 
 .element-card.completed {
   border-color: color-mix(in srgb, var(--success) 45%, transparent);
+}
+
+.element-card.highlighted,
+.element-card.completed.highlighted {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--surface) 86%, var(--primary-container));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 42%, transparent);
 }
 
 .element-card-top {
@@ -2108,7 +2119,8 @@ input {
   }
 
   .galaxy-stage {
-    min-height: 360px;
+    height: 210px;
+    min-height: 210px;
   }
 
   .global-search-trigger {
